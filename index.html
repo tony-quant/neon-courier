@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#16123a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Neon Courier</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="stage"><canvas id="screen" aria-label="Neon Courier game"></canvas></div>
+<div id="touch-ring" aria-hidden="true"><div id="touch-knob"></div></div>
+<button id="mute" type="button">SOUND ON</button>
+<div id="win" role="dialog" aria-labelledby="win-title">
+  <h1 id="win-title">LEVEL COMPLETE</h1>
+  <p id="win-stats"></p>
+  <button id="restart" type="button">PLAY AGAIN</button>
+</div>
+<div id="rotate" role="status">
+  <p>ROTATE YOUR PHONE<br><span>Neon Courier plays in landscape.</span></p>
+</div>
+<script src="levels/level1.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/input.js"></script>
+<script src="js/version.js"></script>
+<script src="js/render.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>

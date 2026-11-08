@@ -140,7 +140,7 @@ test('level: reaching the exit shows the win screen for the sector, and its butt
   await page.evaluate(() => window.__game.setPlayer(1474, 178, 0, 0));
   await waitState(page, (s) => s.won);
   await expect(page.locator('#win')).toHaveClass(/show/);
-  // Sector 1 is the only sector until more are added, so it is also the last one: ALL SECTORS CLEAR.
+  // Sector 1 is not the last sector now (sectors 2 and 3 are live), so the screen is LEVEL COMPLETE, not ALL SECTORS CLEAR.
   const last = before.levelCount === 1;
   await expect(page.locator('#win-title')).toHaveText(last ? 'ALL SECTORS CLEAR' : 'LEVEL COMPLETE');
   await page.locator('#restart').click();

@@ -62,11 +62,13 @@
         g.fillRect(x, top, bw, H - top);
       }
       if (detailed) {
+        // Windows are keyed on the building index i and the offset inside the building (lx), never on the screen
+        // position, so a window keeps its pattern and colour while the layer scrolls.
         for (let wy = top + 6; wy < H - 10; wy += 7) {
-          for (let wx = x + 3; wx < x + bw - 3; wx += 5) {
-            if (hash(wx * 0.37 + wy * 1.9 + i) > 0.8) {
-              g.fillStyle = hash(wx + wy) > 0.5 ? P.winC : P.winP;
-              g.fillRect(wx, wy, 2, 3);
+          for (let lx = 3; lx < bw - 3; lx += 5) {
+            if (hash(i * 0.37 + lx * 1.9 + wy * 0.61 + seed) > 0.8) {
+              g.fillStyle = hash(i * 2.3 + lx * 0.91 + wy * 1.3 + seed) > 0.5 ? P.winC : P.winP;
+              g.fillRect(x + lx, wy, 2, 3);
             }
           }
         }

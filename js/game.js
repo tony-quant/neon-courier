@@ -19,6 +19,7 @@
 
   const muteBtn = document.getElementById('mute');
   const winEl = document.getElementById('win');
+  const winTitle = document.getElementById('win-title');
   const winStats = document.getElementById('win-stats');
   const restartBtn = document.getElementById('restart');
   const portraitQuery = window.matchMedia('(orientation: portrait) and (pointer: coarse)');
@@ -280,7 +281,17 @@
     };
   }
 
-  const LEVEL = parseLevel(window.LEVELS[0]);
+  // Levels are played in the order they appear in window.LEVELS.
+  let levelIndex = 0;
+  let LEVEL = parseLevel(window.LEVELS[0]);
+
+  function isLastLevel() { return levelIndex >= window.LEVELS.length - 1; }
+
+  function loadLevel(index) {
+    levelIndex = index;
+    LEVEL = parseLevel(window.LEVELS[index]);
+    reset();
+  }
 
   function reset() {
     world = makeWorld(LEVEL);
@@ -292,6 +303,9 @@
   }
 
   function showWin() {
+    const last = isLastLevel();
+    winTitle.textContent = last ? 'ALL SECTORS CLEAR' : 'LEVEL COMPLETE';
+    restartBtn.textContent = last ? 'PLAY AGAIN' : 'NEXT SECTOR';
     winStats.textContent = 'Coins ' + world.coinsTaken + '/' + world.coins.length +
       '  ·  Deaths ' + world.deaths;
     winEl.classList.add('show');
@@ -368,7 +382,10 @@
     Sound.toggle();
     refreshMute();
   });
-  restartBtn.addEventListener('click', function () { reset(); });
+  restartBtn.addEventListener('click', function () {
+    if (!world.won) { reset(); return; }
+    loadLevel(isLastLevel() ? 0 : levelIndex + 1);   // next sector, or back to sector 1 after the last
+  });
   window.addEventListener('keydown', function (e) {
     if (e.code === 'KeyM' && !e.repeat) { Sound.toggle(); refreshMute(); }
     if (e.code === 'KeyR' && !e.repeat) reset();
@@ -395,6 +412,8 @@
     state: function () {
       const p = world.player;
       return {
+        levelIndex: levelIndex, levelName: LEVEL.name, levelCount: window.LEVELS.length,
+        exit: { x: LEVEL.exits[0].c * T, y: LEVEL.exits[0].r * T },
         x: p.x, y: p.y, vx: p.vx, vy: p.vy, onGround: p.onGround, face: p.face,
         enemies: world.enemies.map(function (e) { return { x: e.x, y: e.y, alive: e.alive, dir: e.dir }; }),
         coinsTaken: world.coinsTaken, coinsTotal: world.coins.length,

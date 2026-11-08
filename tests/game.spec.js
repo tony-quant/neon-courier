@@ -134,12 +134,15 @@ test('checkpoint: falling in a pit respawns at the checkpoint', async ({ page })
   expect(Math.abs(s.x - cp.checkpointSpawn.x)).toBeLessThan(0.5);
 });
 
-test('level: reaching the exit shows Level Complete, and Play Again restarts', async ({ page }) => {
+test('level: reaching the exit shows the win screen for the sector, and its button restarts', async ({ page }) => {
   await waitGame(page);
+  const before = await state(page);
   await page.evaluate(() => window.__game.setPlayer(1474, 178, 0, 0));
   await waitState(page, (s) => s.won);
   await expect(page.locator('#win')).toHaveClass(/show/);
-  await expect(page.locator('#win-title')).toHaveText('LEVEL COMPLETE');
+  // Sector 1 is the only sector until more are added, so it is also the last one: ALL SECTORS CLEAR.
+  const last = before.levelCount === 1;
+  await expect(page.locator('#win-title')).toHaveText(last ? 'ALL SECTORS CLEAR' : 'LEVEL COMPLETE');
   await page.locator('#restart').click();
   const s = await waitState(page, (st) => !st.won);
   await expect(page.locator('#win')).not.toHaveClass(/show/);

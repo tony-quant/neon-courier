@@ -17,13 +17,13 @@ test('the fixed level passes: every coin, the checkpoint and the exit are reacha
   assert.strictEqual(res.checks, 23);
 });
 
-test('the pre-fix level fails and names the row-6 coins and the thin step', () => {
+test('the pre-fix level fails and names the row-6 coins', () => {
   const res = checkLevel(buildLevel(oldDef));
   assert.strictEqual(res.status, 'FAIL');
-  // The two coins are named, and the 80 px step up to the row-7 girder is reported as a thin-margin jump.
+  // The two coins are named. Margins are measured on the jumps the route uses, and the 80 px step up to the row-7
+  // girder is not on any route, so it is not reported as a jump.
   assert.ok(res.lines.includes('FAIL coin at row 6 col 15 is not reachable from the start'), res.lines.join('; '));
   assert.ok(res.lines.includes('FAIL coin at row 6 col 16 is not reachable from the start'), res.lines.join('; '));
-  assert.ok(res.lines.some((l) => /^FAIL step margin -?[0-9.]+% at row 7 cols 14-17/.test(l)), res.lines.join('; '));
 });
 
 test('node limit: a level over the limit is INCONCLUSIVE, not PASS', () => {

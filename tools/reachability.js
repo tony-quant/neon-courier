@@ -112,17 +112,21 @@ function surfaces(L) {
   }
   return segs;
 }
-// Difficulty measures and jump margins. A margin is how much of the jump is left over: gaps are compared with the
-// running-jump reach (the player's width is added, because the player's left edge has to travel that far), steps
-// with the standing-jump height (or the running height when the jump also crosses a gap).
-function geometry(L, env) {
+// Difficulty measures and jump margins, from the jumps the route uses (the search-tree edges from the spawn point to
+// every reachable surface). A fall is not a jump and has no margin. Pits are the air gaps in the ground. A margin is
+// how much of the envelope is left over: a gap is compared with the running-jump reach (the player's width is added,
+// because the player's left edge must travel that far), a climb with the standing height (or the running height when
+// the jump also crosses a gap).
+function geometry(L, env, routeEdges) {
   const PW = C.PLAYER_W;
   const segs = surfaces(L);
   const floorTop = segs.length ? Math.max.apply(null, segs.map((s) => s.top)) : 0;
+  const runOf = new Map();
+  segs.forEach((sg) => { for (let c = sg.c0; c <= sg.c1; c++) runOf.set(sg.row * L.cols + c, sg); });
+  const where = (A, B) => 'row ' + A.row + ' cols ' + A.c0 + '-' + A.c1 + ' and row ' + B.row + ' cols ' + B.c0 + '-' + B.c1;
   let maxGapPx = 0, maxStepPx = 0, pits = 0;
   const jumps = [];
-  const where = (A, B) => 'row ' + A.row + ' cols ' + A.c0 + '-' + A.c1 + ' and row ' + B.row + ' cols ' + B.c0 + '-' + B.c1;
-  // Gaps: neighbouring surfaces at the same height, left to right.
+  // Pits: air gaps between neighbouring ground surfaces (a solid block in between is a wall, not a pit).
   const byTop = new Map();
   segs.forEach((sg) => { if (!byTop.has(sg.top)) byTop.set(sg.top, []); byTop.get(sg.top).push(sg); });
   byTop.forEach((list) => {
@@ -130,27 +134,30 @@ function geometry(L, env) {
     for (let i = 0; i + 1 < list.length; i++) {
       const left = list[i], right = list[i + 1];
       const gap = right.x0 - left.x1;
-      // Pits are gaps in the ground: open air between two ground surfaces. A solid block in between is a wall, not a pit.
-      // Gaps between girders are covered by the reachability check, not by these measures.
       if (gap <= 0 || left.top !== floorTop) continue;
       let air = true;
       for (let c = left.c1 + 1; c < right.c0; c++) if (L.grid[left.row][c] === '#') air = false;
-      if (!air) continue;
-      maxGapPx = Math.max(maxGapPx, gap);
-      pits++;
-      jumps.push({ kind: 'pit', where: where(left, right), margin: (env.dRun - (gap + PW)) / env.dRun * 100 });
+      if (air) pits++;
     }
   });
-  // Steps: surfaces at different heights that touch in x.
-  for (let i = 0; i < segs.length; i++) {
-    for (let j = i + 1; j < segs.length; j++) {
-      const A = segs[i], B = segs[j];
-      const touch = Math.min(A.x1, B.x1) - Math.max(A.x0, B.x0);
-      if (A.top === B.top || touch <= 0) continue;
-      const rise = Math.abs(A.top - B.top);
-      maxStepPx = Math.max(maxStepPx, rise);
-      jumps.push({ kind: 'step', where: where(A, B), margin: (env.hStand - rise) / env.hStand * 100 });
+  // Jumps: route edges that go up or across a gap.
+  for (const [n, m] of routeEdges) {
+    const A = runOf.get(n), B = runOf.get(m);
+    if (!A || !B || A === B) continue;
+    const gap = Math.max(0, Math.max(B.x0 - A.x1, A.x0 - B.x1));
+    const climb = A.top - B.top;                    // positive: the landing is higher than the start
+    if (climb < 0) continue;                        // a fall
+    let margin;
+    if (gap > 0) {
+      const gapMargin = (env.dRun - (gap + PW)) / env.dRun * 100;
+      margin = climb > 0 ? Math.min(gapMargin, (env.hRun - climb) / env.hRun * 100) : gapMargin;
+      maxGapPx = Math.max(maxGapPx, gap);
+    } else {
+      margin = climb > 0 ? (env.hStand - climb) / env.hStand * 100 : 100;
+      maxStepPx = Math.max(maxStepPx, climb);
     }
+    if (climb > 0) maxStepPx = Math.max(maxStepPx, climb);
+    jumps.push({ kind: gap > 0 ? 'jump' : 'step', where: where(A, B), margin: margin });
   }
   const minMargin = jumps.length ? Math.min.apply(null, jumps.map((j) => j.margin)) : 100;
   return {
@@ -169,23 +176,12 @@ function startXs(L, node) {
   return xs;
 }
 
-function checkLevel(L, limits) {
-  limits = Object.assign({}, LIMITS, limits || {});
-  const t0 = Date.now();
-  const geo = geometry(L, envelope());
-  const nodes = [];
-  for (let r = 0; r < L.rows; r++) for (let c = 0; c < L.cols; c++) if (standable(L, c, r)) nodes.push(r * L.cols + c);
-  if (nodes.length > limits.maxNodes) {
-    return { status: 'INCONCLUSIVE', reason: 'node count ' + nodes.length + ' over limit ' + limits.maxNodes };
-  }
-  const spawnNode = nodeAt(L, L.spawn);
-  if (spawnNode === null) return { status: 'FAIL', reason: 'spawn is not on a standable tile' };
-
-  // Pass 1: edges.
+// Pass 1 of the check: every jump the movement rules allow, as graph edges. Returns { adj, limitHit, timedOut }.
+function buildGraph(L, nodes, limits, t0) {
   const adj = new Map();
   let limitHit = null;
   for (const n of nodes) {
-    if (Date.now() - t0 > limits.timeMs) return { status: 'INCONCLUSIVE', reason: 'time limit ' + limits.timeMs + ' ms reached' };
+    if (Date.now() - t0 > limits.timeMs) return { adj: adj, timedOut: true };
     const out = new Set();
     for (const x of startXs(L, n)) {
       for (const mode of MODES) {
@@ -196,16 +192,37 @@ function checkLevel(L, limits) {
     }
     adj.set(n, out);
   }
-  if (limitHit) return { status: 'INCONCLUSIVE', reason: limitHit };
+  return { adj: adj, limitHit: limitHit, timedOut: false };
+}
+
+function checkLevel(L, limits) {
+  limits = Object.assign({}, LIMITS, limits || {});
+  const t0 = Date.now();
+  const env = envelope();
+  const nodes = [];
+  for (let r = 0; r < L.rows; r++) for (let c = 0; c < L.cols; c++) if (standable(L, c, r)) nodes.push(r * L.cols + c);
+  if (nodes.length > limits.maxNodes) {
+    return { status: 'INCONCLUSIVE', reason: 'node count ' + nodes.length + ' over limit ' + limits.maxNodes };
+  }
+  const spawnNode = nodeAt(L, L.spawn);
+  if (spawnNode === null) return { status: 'FAIL', reason: 'spawn is not on a standable tile' };
+
+  // Pass 1: edges.
+  const graph = buildGraph(L, nodes, limits, t0);
+  if (graph.timedOut) return { status: 'INCONCLUSIVE', reason: 'time limit ' + limits.timeMs + ' ms reached' };
+  if (graph.limitHit) return { status: 'INCONCLUSIVE', reason: graph.limitHit };
+  const adj = graph.adj;
 
   // Breadth-first search from the spawn node.
   const reach = new Set([spawnNode]);
   const queue = [spawnNode];
+  const routeEdges = [];                       // the jumps the route uses: parent -> surface
   while (queue.length) {
     const n = queue.shift();
-    for (const m of adj.get(n) || []) if (!reach.has(m)) { reach.add(m); queue.push(m); }
+    for (const m of adj.get(n) || []) if (!reach.has(m)) { reach.add(m); queue.push(m); routeEdges.push([n, m]); }
   }
 
+  const geo = geometry(L, env, routeEdges);
   // Pass 2: every box a reachable player can occupy (start positions and every trajectory frame).
   const targets = [];
   L.coins.forEach((t) => targets.push({ kind: 'coin', t: t, box: t, hit: false }));

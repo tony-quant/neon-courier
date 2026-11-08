@@ -15,15 +15,14 @@ const LEVEL_FILES = R.levelFiles();
 const levels = R.loadLevels(LEVEL_FILES).map((x) => {
   const L = R.buildLevel(x.def);
   const res = R.checkLevel(L);
-  const geo = R.geometry(L, R.envelope());
   // Copy out of the sandbox realm so plain-object comparisons work.
   const stated = x.def.difficulty ? JSON.parse(JSON.stringify(x.def.difficulty)) : null;
-  return { file: x.file, name: x.def.name, res: res, difficulty: geo.difficulty, minMargin: geo.minMargin, stated: stated };
+  return { file: x.file, name: x.def.name, res: res, difficulty: res.difficulty || {}, minMargin: res.minMargin || 0, stated: stated };
 });
 
 test('every level is in order and passes the reachability check', () => {
-  // One sector for now (sector 1). Change this number when more sectors are added.
-  assert.ok(levels.length === 1, 'expected 1 level, got ' + levels.length);
+  // Sectors 1 to 3 for now. Change this number when more sectors are added.
+  assert.ok(levels.length === 3, 'expected 3 levels, got ' + levels.length);
   for (const lv of levels) {
     assert.strictEqual(lv.res.status, 'PASS', lv.file + ': ' + (lv.res.lines || [lv.res.reason]).join('; '));
   }

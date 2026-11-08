@@ -21,17 +21,21 @@ const levels = R.loadLevels(LEVEL_FILES).map((x) => {
 });
 
 test('every level is in order and passes the reachability check', () => {
-  // One sector live (sector 1). Change this number when more sectors are added.
-  assert.ok(levels.length === 1, 'expected 1 level, got ' + levels.length);
+  // Three sectors are in levels/. Only the first LIVE_SECTORS are in index.html (the live site). Change these numbers
+  // when a sector goes live.
+  assert.ok(levels.length === 3, 'expected 3 levels, got ' + levels.length);
   for (const lv of levels) {
     assert.strictEqual(lv.res.status, 'PASS', lv.file + ': ' + (lv.res.lines || [lv.res.reason]).join('; '));
   }
 });
 
-test('the game loads the levels in the same order as the files are numbered', () => {
+const LIVE_SECTORS = 1;
+
+test('the game loads the live sectors, in the same order as the files are numbered', () => {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const loaded = [...html.matchAll(/src="levels\/(level\d+\.js)"/g)].map((m) => m[1]);
-  assert.deepStrictEqual(loaded, levels.map((lv) => lv.file));
+  assert.strictEqual(loaded.length, LIVE_SECTORS);
+  assert.deepStrictEqual(loaded, levels.slice(0, LIVE_SECTORS).map((lv) => lv.file));
 });
 
 test('stated difficulty matches the layout for every level that states it', () => {

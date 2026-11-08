@@ -31,3 +31,5 @@ npm test             # build + run all browser tests (headless Chromium)
 
 Add a new `{ name, rows }` object to `window.LEVELS` in a new file under `levels/`, and load that file
 before `js/game.js` in `index.html`. Rows use the legend in `levels/level1.js`.
+
+<!-- docs-only filter test -->

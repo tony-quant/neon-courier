@@ -134,18 +134,20 @@ test('checkpoint: falling in a pit respawns at the checkpoint', async ({ page })
   expect(Math.abs(s.x - cp.checkpointSpawn.x)).toBeLessThan(0.5);
 });
 
-test('level: reaching the exit shows the win screen for the sector, and its button restarts', async ({ page }) => {
+test('level: reaching the exit shows the win screen, and NEXT SECTOR goes to the menu', async ({ page }) => {
   await waitGame(page);
-  const before = await state(page);
   await page.evaluate(() => window.__game.setPlayer(1474, 178, 0, 0));
   await waitState(page, (s) => s.won);
   await expect(page.locator('#win')).toHaveClass(/show/);
-  // Sector 1 is not the last sector now (sectors 2 and 3 are live), so the screen is LEVEL COMPLETE, not ALL SECTORS CLEAR.
-  const last = before.levelCount === 1;
-  await expect(page.locator('#win-title')).toHaveText(last ? 'ALL SECTORS CLEAR' : 'LEVEL COMPLETE');
+  await expect(page.locator('#win-title')).toHaveText('LEVEL COMPLETE');
+  await expect(page.locator('#restart')).toHaveText('NEXT SECTOR');
   await page.locator('#restart').click();
-  const s = await waitState(page, (st) => !st.won);
   await expect(page.locator('#win')).not.toHaveClass(/show/);
+  await expect(page.locator('#menu')).toHaveClass(/show/);
+  await page.locator('#menu-list button').first().click();
+  const s = await waitState(page, (st) => !st.won);
+  await expect(page.locator('#menu')).not.toHaveClass(/show/);
+  expect(s.levelIndex).toBe(0);
   expect(s.x).toBeLessThan(100);
 });
 

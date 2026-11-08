@@ -21,8 +21,8 @@ const levels = R.loadLevels(LEVEL_FILES).map((x) => {
 });
 
 test('every level is in order and passes the reachability check', () => {
-  // Three sectors are in levels/. Only the first LIVE_SECTORS are in index.html (the live site). Change these numbers
-  // when a sector goes live.
+  // The sector files are in levels/. Only the first LIVE_SECTORS are in index.html (the live site). Change these
+  // numbers when a sector goes live.
   assert.ok(levels.length === 5, 'expected 5 levels, got ' + levels.length);   // change with the number of sector files
   for (const lv of levels) {
     assert.strictEqual(lv.res.status, 'PASS', lv.file + ': ' + (lv.res.lines || [lv.res.reason]).join('; '));
@@ -30,7 +30,7 @@ test('every level is in order and passes the reachability check', () => {
 });
 
 // Sectors 1 to 5 are live: index.html loads them in numeric order. Set this to the number of sectors loaded.
-const LIVE_SECTORS = 3;
+const LIVE_SECTORS = 5;
 
 test('the game loads the live sectors, in the same order as the files are numbered', () => {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');

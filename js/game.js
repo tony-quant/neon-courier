@@ -22,11 +22,16 @@
   const winTitle = document.getElementById('win-title');
   const winStats = document.getElementById('win-stats');
   const restartBtn = document.getElementById('restart');
+  const menuEl = document.getElementById('menu');
+  const menuList = document.getElementById('menu-list');
+  const menuOpenBtn = document.getElementById('menu-open');
+  const menuCloseBtn = document.getElementById('menu-close');
   const portraitQuery = window.matchMedia('(orientation: portrait) and (pointer: coarse)');
 
   let world = null;
   let manualMode = false;    // tests can take over stepping so timing is exact
   let jumpHeldNow = false;   // jump-held state from this step, used for stomp bounce height
+  let menuOpen = false;      // the sector menu is showing; the game is paused behind it
 
   // ---------- level parsing and tile queries ----------
   function parseLevel(def) {
@@ -293,6 +298,58 @@
     reset();
   }
 
+  // ---------- sector progress and the menu ----------
+  // Finished sectors are kept in memory and saved in the browser. Every storage call is in try/catch: with storage
+  // blocked the game still runs, and progress lasts only until the page is closed.
+  const PROGRESS_KEY = 'neon-courier-progress-v1';
+  let done = (function () {
+    try {
+      const a = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '[]');
+      return Array.isArray(a) ? a.filter(function (i) { return Number.isInteger(i) && i >= 0; }) : [];
+    } catch (e) { return []; }
+  })();
+  function saveDone() {
+    try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(done)); } catch (e) { /* storage blocked: keep in memory */ }
+  }
+  function markDone(index) {
+    if (done.indexOf(index) < 0) { done.push(index); saveDone(); }
+  }
+  // Sector 1 is always open. A sector opens when the one before it is finished.
+  function isUnlocked(index) {
+    return index === 0 || done.indexOf(index - 1) >= 0 || done.indexOf(index) >= 0;
+  }
+  function renderMenu() {
+    menuList.textContent = '';
+    window.LEVELS.forEach(function (def, i) {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.type = 'button';
+      const locked = !isUnlocked(i);
+      const finished = done.indexOf(i) >= 0;
+      b.textContent = (i + 1) + '. ' + def.name + (finished ? '  DONE' : '') + (locked ? '  LOCKED' : '');
+      if (finished) b.className = 'done';
+      b.disabled = locked;
+      b.addEventListener('click', function () { startSector(i); });
+      li.appendChild(b);
+      menuList.appendChild(li);
+    });
+  }
+  function showMenu() {
+    renderMenu();
+    menuOpen = true;
+    menuEl.classList.add('show');
+    winEl.classList.remove('show');
+  }
+  function hideMenu() {
+    menuOpen = false;
+    menuEl.classList.remove('show');
+  }
+  function startSector(index) {
+    if (!isUnlocked(index)) return;
+    hideMenu();
+    loadLevel(index);
+  }
+
   function reset() {
     world = makeWorld(LEVEL);
     world.snapshot = initialSnapshot(world);
@@ -304,8 +361,9 @@
 
   function showWin() {
     const last = isLastLevel();
+    markDone(levelIndex);
     winTitle.textContent = last ? 'ALL SECTORS CLEAR' : 'LEVEL COMPLETE';
-    restartBtn.textContent = last ? 'PLAY AGAIN' : 'NEXT SECTOR';
+    restartBtn.textContent = last ? 'MENU' : 'NEXT SECTOR';
     winStats.textContent = 'Coins ' + world.coinsTaken + '/' + world.coins.length +
       '  ·  Deaths ' + world.deaths;
     winEl.classList.add('show');
@@ -313,7 +371,7 @@
 
   // ---------- rendering and loop ----------
   function paused() {
-    return manualMode || portraitQuery.matches || document.hidden;
+    return manualMode || menuOpen || portraitQuery.matches || document.hidden;
   }
 
   function resize() {
@@ -384,8 +442,10 @@
   });
   restartBtn.addEventListener('click', function () {
     if (!world.won) { reset(); return; }
-    loadLevel(isLastLevel() ? 0 : levelIndex + 1);   // next sector, or back to sector 1 after the last
+    showMenu();                                       // NEXT SECTOR and MENU both go to the menu
   });
+  menuOpenBtn.addEventListener('click', function () { showMenu(); });
+  menuCloseBtn.addEventListener('click', function () { hideMenu(); });
   window.addEventListener('keydown', function (e) {
     if (e.code === 'KeyM' && !e.repeat) { Sound.toggle(); refreshMute(); }
     if (e.code === 'KeyR' && !e.repeat) reset();
@@ -409,6 +469,10 @@
 
   // Small read/teleport hooks used by the automated tests and for debugging.
   window.__game = {
+    menu: function () {
+      return { open: menuOpen, unlocked: window.LEVELS.map(function (d, i) { return isUnlocked(i); }), done: done.slice() };
+    },
+    startSector: startSector,
     state: function () {
       const p = world.player;
       return {

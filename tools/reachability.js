@@ -112,6 +112,19 @@ function surfaces(L) {
   }
   return segs;
 }
+// Tight landings: a pit followed by at most two tiles of ground before the next pit. The player has to take off
+// again almost at once, so these make a level's rhythm harder. Pits can't be wider than three tiles (the 5 percent
+// margin rule), so pit spacing is the lever for difficulty.
+function tightLandings(pitsLeftToRight) {
+  let n = 0;
+  pitsLeftToRight.sort((a, b) => a.s - b.s);
+  for (let i = 0; i + 1 < pitsLeftToRight.length; i++) {
+    const ground = (pitsLeftToRight[i + 1].s - pitsLeftToRight[i].e) / T;
+    if (ground >= 1 && ground <= 2) n++;
+  }
+  return n;
+}
+
 // Difficulty measures and jump margins, from the jumps the route uses (the search-tree edges from the spawn point to
 // every reachable surface). A fall is not a jump and has no margin. Pits are the air gaps in the ground. A margin is
 // how much of the envelope is left over: a gap is compared with the running-jump reach (the player's width is added,
@@ -125,6 +138,7 @@ function geometry(L, env, routeEdges) {
   segs.forEach((sg) => { for (let c = sg.c0; c <= sg.c1; c++) runOf.set(sg.row * L.cols + c, sg); });
   const where = (A, B) => 'row ' + A.row + ' cols ' + A.c0 + '-' + A.c1 + ' and row ' + B.row + ' cols ' + B.c0 + '-' + B.c1;
   let maxGapPx = 0, maxStepPx = 0, pits = 0;
+  const floorPits = [];                         // ground pits, left to right (for tight landings)
   const jumps = [];
   // Pits: air gaps between neighbouring ground surfaces (a solid block in between is a wall, not a pit).
   const byTop = new Map();
@@ -137,7 +151,7 @@ function geometry(L, env, routeEdges) {
       if (gap <= 0 || left.top !== floorTop) continue;
       let air = true;
       for (let c = left.c1 + 1; c < right.c0; c++) if (L.grid[left.row][c] === '#') air = false;
-      if (air) pits++;
+      if (air) { pits++; if (left.top === floorTop) floorPits.push({ s: left.x1, e: right.x0 }); }
     }
   });
   // Jumps: route edges that go up or across a gap.
@@ -161,7 +175,8 @@ function geometry(L, env, routeEdges) {
   }
   const minMargin = jumps.length ? Math.min.apply(null, jumps.map((j) => j.margin)) : 100;
   return {
-    difficulty: { gapTiles: maxGapPx / T, stepTiles: maxStepPx / T, walkers: L.walkers, pits: pits },
+    difficulty: { gapTiles: maxGapPx / T, stepTiles: maxStepPx / T, walkers: L.walkers, pits: pits,
+      tightLandings: tightLandings(floorPits) },
     jumps: jumps, minMargin: minMargin,
   };
 }
@@ -252,7 +267,7 @@ function checkLevel(L, limits) {
   thin.forEach((j) => lines.push('FAIL ' + j.kind + ' margin ' + j.margin.toFixed(1) + '% at ' + j.where + ' (below 5%)'));
   return { status: lines.length ? 'FAIL' : 'PASS', lines: lines,
     summary: summary + '; min jump margin ' + geo.minMargin.toFixed(1) + '%',
-    checks: targets.length, difficulty: geo.difficulty, minMargin: geo.minMargin };
+    checks: targets.length, difficulty: geo.difficulty, minMargin: geo.minMargin, jumps: geo.jumps };
 }
 
 // Jump envelope from the same physics, on a flat floor (printed for comparison).
@@ -287,7 +302,9 @@ function envelope() {
     analyticPeak: C.JUMP_V * C.JUMP_V / (2 * C.GRAVITY) };
 }
 
-module.exports = { buildLevel, checkLevel, envelope, geometry, loadLevels, levelFiles, LIMITS };
+module.exports = { buildLevel, checkLevel, envelope, geometry, loadLevels, levelFiles, LIMITS,
+  // internals, exported for the analysis scripts only
+  buildGraph, simulate, MODES, startXs, standable, nodeAt, overlapBox };
 
 function main() {
   const env = envelope();

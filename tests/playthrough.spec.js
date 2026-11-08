@@ -4,35 +4,68 @@
 // pit it could not cross, or was hit) or runs out of frames. Sectors are played in order, with NEXT SECTOR between them.
 const { test, expect } = require('@playwright/test');
 const R = require('../tools/reachability.js');
+const Physics = require('../js/physics.js');
 
 const SECTORS = R.loadLevels(R.levelFiles()).map((x) => R.buildLevel(x.def));
 const MAX_FRAMES = 6000;
 const T = 16, PW = 10, PH = 14;
 
 const isGround = (ch) => ch === '#' || ch === '-';
-// One frame of the script: returns whether to press jump now and whether jump should stay held.
+// Would a jump started now land on standable ground? The script runs the game's own movement rules (js/physics.js)
+// forward from the current state. This finds the timing windows for jumps across pits with short landings.
+function jumpLandsSafely(L, s) {
+  const walkers = s.enemies.filter((e) => e.alive);
+  let p = Physics.makePlayer(s.x, s.y);
+  p.vx = s.vx;
+  p.onGround = true;
+  for (let f = 0; f < 200; f++) {
+    const jumpHeld = f === 0 || p.vy < 0;
+    p = Physics.stepPlayer(L, p, { moveX: 1, jumpPressed: f === 0, jumpHeld: jumpHeld }).player;
+    if (p.y > L.heightPx + 24) return false;                 // fell into a pit
+    // A walker where the jump would pass (its current position, with a margin): not safe.
+    for (const e of walkers) {
+      if (p.x < e.x + 12 + 8 && p.x + PW > e.x - 8 && p.y < e.y + 12 + 4 && p.y + PH > e.y - 4) return false;
+    }
+    if (f > 0 && p.onGround && p.vy >= 0) return nodeAt(L, p) !== null;   // landed on standable ground
+  }
+  return false;
+}
+function nodeAt(L, p) {
+  const feet = p.y + p.h;
+  const r = Math.round(feet / T);
+  if (Math.abs(feet - r * T) > 0.01) return null;
+  const c = Math.floor((p.x + p.w / 2) / T);
+  return isGround(L.grid[r] && L.grid[r][c]) ? c : null;
+}
+
+// One frame of the script. It keeps moving right. It jumps when a pit or a wall is close ahead and a jump now would
+// land safely. A walker ahead makes it wait until the walker is about a tile away, then jump over it.
 function decide(L, s) {
-  // Outside the level: solid on the sides, open air below the bottom row.
   const at = (r, c) => (c < 0 || c >= L.cols) ? '#' : (r < 0 || r >= L.rows) ? '.' : L.grid[r][c];
   const feetRow = Math.round((s.y + PH) / T);          // the row whose top the player stands on
   const frontCol = Math.floor((s.x + PW + 1) / T);
-  let obstacle = false;
+  let jumpPressed = false, waitForWalker = false;
   if (s.onGround) {
-    // A pit is open air under the next column, all the way down: a drop onto ground below is not a pit.
-    const ahead = frontCol + 1;
-    let ground = false;
-    for (let rr = feetRow; rr <= feetRow + 3; rr++) if (isGround(at(rr, ahead))) ground = true;
-    if (!ground) obstacle = true;                                                         // pit one tile ahead
-    for (let c = frontCol; c <= frontCol + 2; c++) {
-      if (at(feetRow - 1, c) === '#') obstacle = true;                                    // wall ahead
+    let pitClose = false, wallClose = false;
+    for (let c = frontCol + 1; c <= frontCol + 3; c++) {
+      let g = false;
+      for (let rr = feetRow; rr <= feetRow + 3; rr++) if (isGround(at(rr, c))) g = true;
+      if (!g) pitClose = true;
+      if (at(feetRow - 1, c) === '#') wallClose = true;
     }
-    for (const e of s.enemies) {
-      if (e.alive && e.x > s.x + PW && e.x < s.x + PW + 3 * T && Math.abs(e.y - s.y) < 16) obstacle = true;  // walker ahead
+    if (pitClose || wallClose) jumpPressed = jumpLandsSafely(L, s);
+    if (!pitClose) {
+      for (const e of s.enemies) {
+        const d = e.x - (s.x + PW);
+        if (e.alive && d > 0 && d < 3 * T && Math.abs(e.y - s.y) < 16) {
+          if (d <= 20) jumpPressed = true;             // close enough: jump over it
+          else waitForWalker = true;                   // still far: stop and let it come
+        }
+      }
     }
   }
-  const jumpPressed = s.onGround && obstacle;
   const jumpHeld = jumpPressed || s.vy < 0;
-  return { jumpPressed: jumpPressed, jumpHeld: jumpHeld };
+  return { jumpPressed: jumpPressed, jumpHeld: jumpHeld, moveRight: !(waitForWalker && !jumpPressed) };
 }
 
 // layoutIndex: which sector's tiles the script reads. gameIndex: the level the game is playing (0 when only one is served).
@@ -48,6 +81,7 @@ async function playSector(page, layoutIndex, gameIndex) {
   expect(s.levelIndex).toBe(gameIndex);
   const deaths0 = s.deaths;
   let jumpDown = false;
+  let rightDown = true;                    // openGame() presses the right arrow
   const recent = [];                       // the last few frames, for the failure message
   for (let f = 0; f < MAX_FRAMES; f++) {
     if (s.won) {
@@ -61,6 +95,8 @@ async function playSector(page, layoutIndex, gameIndex) {
     const d = decide(L, s);
     recent.push('f' + f + ' x' + Math.round(s.x) + ' y' + Math.round(s.y) + (s.onGround ? ' ground' : ' air') +
       (d.jumpPressed ? ' JUMP' : '') + ' walkers' + JSON.stringify(s.enemies.filter((e) => e.alive).map((e) => [Math.round(e.x), Math.round(e.y)])));
+    if (d.moveRight && !rightDown) { await page.keyboard.down('ArrowRight'); rightDown = true; }
+    else if (!d.moveRight && rightDown) { await page.keyboard.up('ArrowRight'); rightDown = false; }
     if (d.jumpPressed && !jumpDown) { await page.keyboard.down('Space'); jumpDown = true; }
     else if (!d.jumpHeld && jumpDown) { await page.keyboard.up('Space'); jumpDown = false; }
     s = await page.evaluate(() => { window.__game.stepFrames(1); const st = window.__game.state();

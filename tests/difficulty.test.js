@@ -1,5 +1,5 @@
 // tests/difficulty.test.js — the levels get harder, never easier, and every level passes the reachability check.
-// Measures per level: largest gap (tiles), largest step (tiles), walkers, pits. Each must be equal to or greater than
+// Measures per level: largest gap (tiles), largest step (tiles), walkers, pits, tight landings. Each must be equal to or greater than
 // the previous level's, and at least one must be strictly greater. Jump margins must be at least 5 percent.
 // Stated difficulty (levels 2 and up) must match the layout. Run: node --test tests/difficulty.test.js
 'use strict';
@@ -39,13 +39,13 @@ test('stated difficulty matches the layout for every level that states it', () =
     if (!lv.stated) continue;
     assert.deepStrictEqual(lv.stated, {
       gapTiles: lv.difficulty.gapTiles, stepTiles: lv.difficulty.stepTiles,
-      walkers: lv.difficulty.walkers, pits: lv.difficulty.pits,
+      walkers: lv.difficulty.walkers, pits: lv.difficulty.pits, tightLandings: lv.difficulty.tightLandings,
     }, lv.file + ' states a difficulty that does not match its layout');
   }
 });
 
 test('difficulty never decreases from one level to the next, and each level adds something', () => {
-  const keys = ['gapTiles', 'stepTiles', 'walkers', 'pits'];
+  const keys = ['gapTiles', 'stepTiles', 'walkers', 'pits', 'tightLandings'];
   for (let i = 1; i < levels.length; i++) {
     const prev = levels[i - 1].difficulty, cur = levels[i].difficulty;
     for (const k of keys) {
@@ -63,8 +63,8 @@ test('every jump has at least a 5 percent margin', () => {
 
 test('print the difficulty table', () => {
   const rows = levels.map((lv) => [lv.file.replace('.js', ''), lv.difficulty.gapTiles, lv.difficulty.stepTiles,
-    lv.difficulty.walkers, lv.difficulty.pits, lv.minMargin.toFixed(1) + '%', lv.res.status]);
-  const head = ['level', 'gap (tiles)', 'step (tiles)', 'walkers', 'pits', 'min jump margin', 'reachability'];
+    lv.difficulty.walkers, lv.difficulty.pits, lv.difficulty.tightLandings, lv.minMargin.toFixed(1) + '%', lv.res.status]);
+  const head = ['level', 'gap (tiles)', 'step (tiles)', 'walkers', 'pits', 'tight landings', 'min jump margin', 'reachability'];
   const table = [head].concat(rows).map((r) => '| ' + r.join(' | ') + ' |').join('\n');
   console.log(table);
   assert.ok(table.length > 0);

@@ -12,6 +12,7 @@
     neonC: '#38f2ff', neonP: '#ff3b9a', coin: '#ffd23f', orange: '#ff8a3d',
     white: '#f2f4ff', bodyL: '#d6dff0', bodyD: '#5a6480', gray: '#6b6f8a',
     black: '#07060f', girder: '#ff3b9a',
+    winC: '#2f8794', winP: '#9a3d6e',   // muted background windows (calmer than neonC/neonP)
   };
 
   function hash(n) {
@@ -27,18 +28,19 @@
     }
   }
 
-  function drawStars(g, t) {
+  function drawStars(g) {
     g.fillStyle = P.white;
+    g.globalAlpha = 0.6;
     for (let i = 0; i < 36; i++) {
       const x = Math.floor(hash(i * 1.7) * W);
       const y = Math.floor(hash(i * 2.9) * 80);
-      const on = (Math.floor(t * 1.5 + i) % 7) !== 0;
-      if (on) g.fillRect(x, y, 1, 1);
+      g.fillRect(x, y, 1, 1);
     }
+    g.globalAlpha = 1;
   }
 
   // Procedural skyline. camX * par gives the parallax offset.
-  function drawSkyline(g, camX, par, color, seed, detailed, t) {
+  function drawSkyline(g, camX, par, color, seed, detailed) {
     const BW = 20;
     const off = camX * par;
     const i0 = Math.floor(off / BW) - 1;
@@ -62,8 +64,8 @@
       if (detailed) {
         for (let wy = top + 6; wy < H - 10; wy += 7) {
           for (let wx = x + 3; wx < x + bw - 3; wx += 5) {
-            if (hash(wx * 0.37 + wy * 1.9 + i) > 0.8 && (Math.floor(t * 2 + wx + wy) % 9) !== 0) {
-              g.fillStyle = hash(wx + wy) > 0.5 ? P.neonC : P.neonP;
+            if (hash(wx * 0.37 + wy * 1.9 + i) > 0.8) {
+              g.fillStyle = hash(wx + wy) > 0.5 ? P.winC : P.winP;
               g.fillRect(wx, wy, 2, 3);
             }
           }
@@ -73,11 +75,11 @@
   }
 
   function drawRain(g, t) {
-    g.globalAlpha = 0.22;
+    g.globalAlpha = 0.14;
     g.fillStyle = P.neonC;
     for (let k = 0; k < 36; k++) {
       const x = Math.floor(hash(k * 3.3) * W);
-      const y = Math.floor(((hash(k * 5.1) * H) + t * 160) % H);
+      const y = Math.floor(((hash(k * 5.1) * H) + t * 55) % H);
       g.fillRect(x, y, 1, 3);
     }
     g.globalAlpha = 1;
@@ -287,9 +289,9 @@
     const cam = world.cam;
     g.imageSmoothingEnabled = false;
     drawSky(g);
-    drawStars(g, world.time);
-    drawSkyline(g, cam.x, 0.2, P.far, 1, false, world.time);
-    drawSkyline(g, cam.x, 0.45, P.near, 9, true, world.time);
+    drawStars(g);
+    drawSkyline(g, cam.x, 0.2, P.far, 1, false);
+    drawSkyline(g, cam.x, 0.45, P.near, 9, true);
     drawRain(g, world.time);
     drawTiles(g, world);
     drawCoins(g, world);

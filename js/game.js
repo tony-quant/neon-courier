@@ -2,25 +2,12 @@
 (function () {
   'use strict';
 
-  const W = 384, H = 216, T = 16;
-  const STEP = 1 / 60;
-  const EPS = 0.0001;
-
-  // Tuning. Change these numbers to change the feel.
-  const GRAVITY = 900;        // px/s^2
-  const MAX_FALL = 420;       // px/s
-  const RUN = 105;            // px/s top speed
-  const ACC_GROUND = 1100;    // px/s^2
-  const FRIC_GROUND = 1200;
-  const ACC_AIR = 650;
-  const FRIC_AIR = 220;
-  const JUMP_V = 330;         // px/s launch speed (about 3.7 tiles high when held)
-  const RELEASE_MULT = 2.6;   // extra gravity while rising and jump is released (short hop)
-  const COYOTE = 6;           // steps (~100 ms) you can still jump after leaving a ledge
-  const BUFFER = 6;           // steps (~100 ms) a jump press is remembered before landing
+  const Physics = window.Physics;
+  const { W, H, T, STEP, EPS, JUMP_V, PLAYER_W, PLAYER_H } = Physics.C;
+  // Tile helpers are shared with the walkers, so they come from the same module.
+  const solidAt = Physics.solidAt, oneWayAt = Physics.oneWayAt;
   const INVULN = 60;          // steps of protection after respawning
   const WALK = 40;            // walker speed px/s
-  const PLAYER_W = 10, PLAYER_H = 14;
   const ENEMY_W = 12, ENEMY_H = 12;
 
   const canvas = document.getElementById('screen');
@@ -72,92 +59,12 @@
     return L;
   }
 
-  function solidAt(L, c, r) {
-    if (c < 0 || c >= L.cols) return true;   // level edges are walls
-    if (r < 0 || r >= L.rows) return false;  // open above, and below is the pit
-    return L.grid[r][c] === '#';
-  }
-  function oneWayAt(L, c, r) {
-    if (c < 0 || c >= L.cols || r < 0 || r >= L.rows) return false;
-    return L.grid[r][c] === '-';
-  }
-
   function overlap(a, b) {
     return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
-  }
-  function approach(v, target, amount) {
-    if (v < target) return Math.min(target, v + amount);
-    return Math.max(target, v - amount);
   }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
   // ---------- physics ----------
-  function moveX(L, e, dx) {
-    e.x += dx;
-    if (dx === 0) return false;
-    const r0 = Math.floor(e.y / T), r1 = Math.floor((e.y + e.h - EPS) / T);
-    if (dx > 0) {
-      const c = Math.floor((e.x + e.w - EPS) / T);
-      for (let r = r0; r <= r1; r++) {
-        if (solidAt(L, c, r)) { e.x = c * T - e.w; return true; }
-      }
-    } else {
-      const c = Math.floor(e.x / T);
-      for (let r = r0; r <= r1; r++) {
-        if (solidAt(L, c, r)) { e.x = (c + 1) * T; return true; }
-      }
-    }
-    return false;
-  }
-
-  // Returns true if the entity landed on something this step.
-  function moveY(L, e, dy, prevBottom) {
-    e.y += dy;
-    const c0 = Math.floor(e.x / T), c1 = Math.floor((e.x + e.w - EPS) / T);
-    if (dy > 0) {
-      const bottom = e.y + e.h;
-      const rStart = Math.floor(prevBottom / T);
-      const rEnd = Math.floor((bottom - EPS) / T);
-      for (let r = rStart; r <= rEnd; r++) {
-        const rowTop = r * T;
-        if (rowTop < prevBottom - EPS) continue;   // we were already below this row's top
-        for (let c = c0; c <= c1; c++) {
-          if (solidAt(L, c, r) || oneWayAt(L, c, r)) {
-            e.y = rowTop - e.h;
-            e.vy = 0;
-            return true;
-          }
-        }
-      }
-    } else if (dy < 0) {
-      const r = Math.floor(e.y / T);
-      const prevTop = e.y - dy;
-      if (prevTop >= (r + 1) * T - EPS) {
-        for (let c = c0; c <= c1; c++) {
-          if (solidAt(L, c, r)) {
-            e.y = (r + 1) * T;
-            e.vy = 0;
-            return false;
-          }
-        }
-      }
-    }
-    return false;
-  }
-
-  // True when the entity stands on solid ground (or a girder) right now.
-  function groundProbe(L, e) {
-    if (e.vy < 0) return false;
-    const r = Math.floor((e.y + e.h + 1) / T);
-    const c0 = Math.floor(e.x / T), c1 = Math.floor((e.x + e.w - EPS) / T);
-    const feet = e.y + e.h;
-    for (let c = c0; c <= c1; c++) {
-      if (solidAt(L, c, r)) return true;
-      if (oneWayAt(L, c, r) && Math.abs(r * T - feet) <= 1.5) return true;
-    }
-    return false;
-  }
-
   function puff(n, x, y, color) {
     for (let i = 0; i < n; i++) {
       world.particles.push({
@@ -168,46 +75,14 @@
   }
 
   function stepPlayer(inp) {
-    const p = world.player;
     const L = world.level;
-    const prevBottom = p.y + p.h;
-
-    // Horizontal: accelerate toward the target speed, or slow down with friction.
-    if (Math.abs(inp.moveX) > 0.02) {
-      const target = inp.moveX * RUN;
-      p.vx = approach(p.vx, target, (p.onGround ? ACC_GROUND : ACC_AIR) * STEP);
-    } else {
-      p.vx = approach(p.vx, 0, (p.onGround ? FRIC_GROUND : FRIC_AIR) * STEP);
-    }
-    if (Math.abs(p.vx) > 4) p.face = p.vx > 0 ? 1 : -1;
-
-    // Jump timers: coyote time and jump buffering.
-    if (inp.jumpPressed) p.jumpBuf = BUFFER;
-    else if (p.jumpBuf > 0) p.jumpBuf--;
-    if (p.onGround) p.coyote = COYOTE;
-    else if (p.coyote > 0) p.coyote--;
-
-    if (p.jumpBuf > 0 && p.coyote > 0) {
-      p.vy = -JUMP_V;
-      p.jumpBuf = 0;
-      p.coyote = 0;
-      p.onGround = false;
-      puff(4, p.x + p.w / 2, p.y + p.h, '#f2f4ff');
+    const res = Physics.stepPlayer(L, world.player, inp);
+    world.player = res.player;
+    if (res.jumped) {
+      puff(4, res.jumped.x, res.jumped.y, '#f2f4ff');
       Sound.play('jump');
     }
-
-    // Vertical: heavier gravity while rising without the jump held gives a short hop.
-    let g = GRAVITY;
-    if (p.vy < 0 && !inp.jumpHeld) g *= RELEASE_MULT;
-    p.vy = Math.min(MAX_FALL, p.vy + g * STEP);
-
-    moveX(L, p, p.vx * STEP);
-    moveY(L, p, p.vy * STEP, prevBottom);
-    p.onGround = groundProbe(L, p);
-    p.anim += Math.abs(p.vx) * STEP * 0.4;
-    if (p.invuln > 0) p.invuln--;
-
-    if (p.y > L.heightPx + 24) respawn('pit');
+    if (res.pit) respawn('pit');
   }
 
   function stepEnemy(e, L) {

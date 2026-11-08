@@ -15,6 +15,7 @@ const isGround = (ch) => ch === '#' || ch === '-';
 // forward from the current state. This finds the timing windows for jumps across pits with short landings.
 function jumpLandsSafely(L, s) {
   const walkers = s.enemies.filter((e) => e.alive);
+  let prevBottom = s.y + PH;
   let p = Physics.makePlayer(s.x, s.y);
   p.vx = s.vx;
   p.onGround = true;
@@ -22,11 +23,21 @@ function jumpLandsSafely(L, s) {
     const jumpHeld = f === 0 || p.vy < 0;
     p = Physics.stepPlayer(L, p, { moveX: 1, jumpPressed: f === 0, jumpHeld: jumpHeld }).player;
     if (p.y > L.heightPx + 24) return false;                 // fell into a pit
-    // A walker where the jump would pass (its current position, with a margin): not safe.
+    // A walker where the jump would pass (its current position, with a margin): not safe, unless the player comes
+    // down onto it from above, which is a stomp (the same test as js/game.js checkEnemies).
     for (const e of walkers) {
-      if (p.x < e.x + 12 + 8 && p.x + PW > e.x - 8 && p.y < e.y + 12 + 4 && p.y + PH > e.y - 4) return false;
+      if (p.x < e.x + 12 + 8 && p.x + PW > e.x - 8 && p.y < e.y + 12 + 4 && p.y + PH > e.y - 4) {
+        const stomp = p.vy > 0 && prevBottom <= e.y + 5;
+        if (!stomp) return false;
+        return true;                                   // a stomp bounces the player: the landing is treated as safe
+      }
     }
-    if (f > 0 && p.onGround && p.vy >= 0) return nodeAt(L, p) !== null;   // landed on standable ground
+    prevBottom = p.y + PH;
+    if (f > 0 && p.onGround && p.vy >= 0) {
+      // Landed on standable ground, at least 4 px inside the tile: the edge of the window is too tight for the real game.
+      const cl = Math.floor(p.x / T);
+      return isGround(L.grid[Math.round((p.y + PH) / T)] && L.grid[Math.round((p.y + PH) / T)][cl]) && p.x - cl * T >= 4;
+    }
   }
   return false;
 }
@@ -114,7 +125,9 @@ async function openGame(page, index) {
   }
   await page.goto('/');
   await page.waitForFunction(() => !!window.__game);
-  await page.evaluate(() => { window.__game.manual(true); window.__game.stepFrames(0); });
+  // The game steps physics in real time from page load until manual stepping starts, so the walkers would be in a
+  // different place on each run. Switching to manual stepping and restarting the sector makes every run start at frame 0.
+  await page.evaluate(() => { window.__game.manual(true); window.__game.reset(); window.__game.stepFrames(0); });
   await page.keyboard.down('ArrowRight');
 }
 

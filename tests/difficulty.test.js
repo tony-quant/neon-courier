@@ -21,8 +21,8 @@ const levels = R.loadLevels(LEVEL_FILES).map((x) => {
 });
 
 test('every level is in order and passes the reachability check', () => {
-  // Sectors 1 to 3 for now. Change this number when more sectors are added.
-  assert.ok(levels.length === 3, 'expected 3 levels, got ' + levels.length);
+  // One sector live (sector 1). Change this number when more sectors are added.
+  assert.ok(levels.length === 1, 'expected 1 level, got ' + levels.length);
   for (const lv of levels) {
     assert.strictEqual(lv.res.status, 'PASS', lv.file + ': ' + (lv.res.lines || [lv.res.reason]).join('; '));
   }

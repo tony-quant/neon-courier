@@ -1,0 +1,15 @@
+{
+  "name": "neon-courier",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "node tools/build.js",
+    "icons": "node tools/make-icons.js",
+    "test": "node tools/build.js && playwright test"
+  },
+  "description": "Neon Courier: offline-capable 2D platformer",
+  "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "playwright": "^1.49.1"
+  },
+  "private": true
+}

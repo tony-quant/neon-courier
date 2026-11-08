@@ -123,8 +123,7 @@
     g.fillStyle = P.gray;
     g.fillRect(x + 7, y + 1, 2, 15);
     g.fillStyle = on ? P.neonC : P.gray;
-    const wave = on ? Math.round(Math.sin(t * 6)) : 0;
-    g.fillRect(x + 9, y + 1 + (wave > 0 ? 0 : 1), 6, 5);
+    g.fillRect(x + 9, y + 1, 6, 5);     // steady: no fluttering
     if (on) {
       g.fillStyle = P.neonC;
       g.globalAlpha = 0.35;
@@ -136,8 +135,7 @@
   function drawExit(g, x, y, t) {
     g.fillStyle = P.black;
     g.fillRect(x + 2, y, 12, 16);
-    const pulse = (Math.sin(t * 4) + 1) / 2;
-    g.fillStyle = pulse > 0.5 ? P.neonP : P.neonC;
+    g.fillStyle = P.neonC;               // steady frame: no colour swap
     g.fillRect(x + 2, y, 12, 1);
     g.fillRect(x + 2, y, 1, 16);
     g.fillRect(x + 13, y, 1, 16);
@@ -170,7 +168,7 @@
       if (co.taken) continue;
       const x = Math.round(co.x - world.cam.x), y = Math.round(co.y - world.cam.y);
       if (x < -8 || x > W) continue;
-      const w = 2 + Math.round(Math.abs(Math.sin(world.time * 3 + i)) * 4);
+      const w = 4;                     // steady width: no shimmer
       const left = x + Math.round((8 - w) / 2);
       g.fillStyle = P.orange;
       g.fillRect(left - 1, y - 1, w + 2, 10);
@@ -195,7 +193,7 @@
     g.fillStyle = P.coin;
     const ex = e.dir > 0 ? x + 7 : x + 3;
     g.fillRect(ex, y + 4, 2, 2);
-    const s = Math.floor(e.anim) % 2;
+    const s = Math.floor(e.anim / 2) % 2;   // leg swap at half speed
     g.fillStyle = P.gray;
     g.fillRect(x + (s ? 1 : 2), y + 9, 2, 3);
     g.fillRect(x + (s ? 9 : 8), y + 9, 2, 3);

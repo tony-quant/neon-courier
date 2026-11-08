@@ -1,10 +1,23 @@
-# Test, then publish the game to GitHub Pages. Runs on pushes to the platformer branch and on manual start.
+# Test, then publish the game to GitHub Pages. Runs on pushes to the platformer branch that change a game file, and on manual start.
+# Documentation-only pushes (CLAUDE.md, README.md) do not start a run.
 # A failing test stops the workflow before anything is uploaded or deployed.
 name: pages
 
 on:
   push:
     branches: [platformer]
+    paths:
+      - index.html
+      - css/**
+      - js/**
+      - levels/**
+      - icons/**
+      - manifest.webmanifest
+      - sw.js
+      - package.json
+      - package-lock.json
+      - tools/build.js
+      - tests/**
   workflow_dispatch:
 
 permissions:

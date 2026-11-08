@@ -96,6 +96,8 @@ test('gamepad: stick runs, Cross jumps, and it is picked up automatically', asyn
   await page.evaluate(() => { window.__pad.buttons[0].pressed = true; });
   await waitState(page, (s) => s.y < s.spawn.y - 30, 2000);
   await page.evaluate(() => { window.__pad.buttons[0].pressed = false; });
+  expect(await page.evaluate(() => window.Input.gamepadConnected())).toBe(true);
+  expect(await page.evaluate(() => window.Input.padNotice())).toBeGreaterThan(0);
 });
 
 test('enemy: stomping from above defeats the walker and bounces the player', async ({ page }) => {

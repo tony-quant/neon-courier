@@ -259,6 +259,11 @@
     const label = 'build ' + (window.BUILD_VERSION || 'dev');
     g.fillText(label, W - Math.round(g.measureText(label).width) - 4, H - 11);
     g.globalAlpha = 1;
+    if (window.Input && Input.padNotice() > 0) {
+      const msg = 'CONTROLLER CONNECTED';
+      g.fillStyle = P.neonC;
+      g.fillText(msg, Math.round((W - g.measureText(msg).width) / 2), 24);
+    }
     if (world.hintT > 0) {
       const msg = 'DRAG LEFT TO RUN  -  TAP RIGHT TO JUMP';
       const tw = Math.round(g.measureText(msg).width);

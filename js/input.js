@@ -27,6 +27,8 @@
   let active = 'keyboard';
   let jumpPending = false;
   let padWasActive = false;
+  let padSeen = false;
+  let padNoticeFrames = 0;   // shows "controller connected" on screen for a moment
 
   let joy = null;                  // floating joystick: {id, ox, oy, x, y}
   const rightTouches = new Map();  // id -> {y0, t0, swiped}
@@ -65,7 +67,12 @@
       src.gamepad.moveX = 0;
       src.gamepad.held = false;
       padWasActive = false;
+      padSeen = false;
       return;
+    }
+    if (!padSeen) {
+      padSeen = true;
+      padNoticeFrames = 180;
     }
     const b = pad.buttons || [];
     const down = (i) => !!(b[i] && (b[i].pressed || b[i].value > 0.5));
@@ -178,6 +185,7 @@
     src.touch.moveX = joy ? joyMoveX() : 0;
     src.touch.held = [...rightTouches.values()].some((r) => !r.swiped);
 
+    if (padNoticeFrames > 0) padNoticeFrames--;
     const s = src[active];
     const out = { moveX: s.moveX, jumpHeld: s.held, jumpPressed: jumpPending };
     jumpPending = false;
@@ -204,5 +212,7 @@
     sample: sample,
     reset: reset,
     activeSource: function () { return active; },
+    padNotice: function () { return padNoticeFrames; },
+    gamepadConnected: function () { return padSeen; },
   };
 })();

@@ -32,19 +32,21 @@ function levelFiles() {
   const i = args.indexOf('--level');
   if (i >= 0) return [path.resolve(args[i + 1])];
   const dir = path.join(ROOT, 'levels');
-  return fs.readdirSync(dir).filter((x) => x.endsWith('.js')).sort().map((x) => path.join(dir, x));
+  const natural = (a, b) => (parseInt(a.replace(/\D/g, ''), 10) || 0) - (parseInt(b.replace(/\D/g, ''), 10) || 0) || (a < b ? -1 : 1);
+  return fs.readdirSync(dir).filter((x) => x.endsWith('.js')).sort(natural).map((x) => path.join(dir, x));
 }
 
 function buildLevel(def) {
   const cols = Math.max.apply(null, def.rows.map((r) => r.length));
   const grid = def.rows.map((r) => r.padEnd(cols, '.').split(''));
   const L = { name: def.name, cols: cols, rows: grid.length, grid: grid, widthPx: cols * T, heightPx: grid.length * T,
-    coins: [], checkpoints: [], exits: [], spawn: null };
+    coins: [], checkpoints: [], exits: [], spawn: null, walkers: 0 };
   grid.forEach((row, r) => row.forEach((ch, c) => {
     if (ch === 'p') L.spawn = { x: c * T + 3, y: (r + 1) * T - C.PLAYER_H, w: C.PLAYER_W, h: C.PLAYER_H };
     if (ch === '$') L.coins.push({ c: c, r: r, x: c * T + 4, y: r * T + 4, w: 8, h: 8 });
     if (ch === 'k') L.checkpoints.push({ c: c, r: r, x: c * T, y: r * T, w: T, h: T });
     if (ch === 'x') L.exits.push({ c: c, r: r, x: c * T, y: r * T, w: T, h: T });
+    if (ch === 'e') L.walkers++;
   }));
   if (!L.spawn) throw new Error(def.name + ': no start tile (p)');
   return L;
@@ -97,6 +99,66 @@ function simulate(L, startX, startNode, mode, onBox, limits) {
   }
   return { status: airborne ? 'limit' : 'stuck', node: null };
 }
+// Surfaces of the level, grouped into runs of standable tiles at the same height.
+function surfaces(L) {
+  const segs = [];
+  for (let r = 0; r < L.rows; r++) {
+    let start = -1;
+    for (let c = 0; c <= L.cols; c++) {
+      const ok = c < L.cols && standable(L, c, r);
+      if (ok && start < 0) start = c;
+      if (!ok && start >= 0) { segs.push({ row: r, c0: start, c1: c - 1, top: r * T, x0: start * T, x1: c * T }); start = -1; }
+    }
+  }
+  return segs;
+}
+// Difficulty measures and jump margins. A margin is how much of the jump is left over: gaps are compared with the
+// running-jump reach (the player's width is added, because the player's left edge has to travel that far), steps
+// with the standing-jump height (or the running height when the jump also crosses a gap).
+function geometry(L, env) {
+  const PW = C.PLAYER_W;
+  const segs = surfaces(L);
+  const floorTop = segs.length ? Math.max.apply(null, segs.map((s) => s.top)) : 0;
+  let maxGapPx = 0, maxStepPx = 0, pits = 0;
+  const jumps = [];
+  const where = (A, B) => 'row ' + A.row + ' cols ' + A.c0 + '-' + A.c1 + ' and row ' + B.row + ' cols ' + B.c0 + '-' + B.c1;
+  // Gaps: neighbouring surfaces at the same height, left to right.
+  const byTop = new Map();
+  segs.forEach((sg) => { if (!byTop.has(sg.top)) byTop.set(sg.top, []); byTop.get(sg.top).push(sg); });
+  byTop.forEach((list) => {
+    list.sort((a, b) => a.x0 - b.x0);
+    for (let i = 0; i + 1 < list.length; i++) {
+      const left = list[i], right = list[i + 1];
+      const gap = right.x0 - left.x1;
+      // Pits are gaps in the ground: open air between two ground surfaces. A solid block in between is a wall, not a pit.
+      // Gaps between girders are covered by the reachability check, not by these measures.
+      if (gap <= 0 || left.top !== floorTop) continue;
+      let air = true;
+      for (let c = left.c1 + 1; c < right.c0; c++) if (L.grid[left.row][c] === '#') air = false;
+      if (!air) continue;
+      maxGapPx = Math.max(maxGapPx, gap);
+      pits++;
+      jumps.push({ kind: 'pit', where: where(left, right), margin: (env.dRun - (gap + PW)) / env.dRun * 100 });
+    }
+  });
+  // Steps: surfaces at different heights that touch in x.
+  for (let i = 0; i < segs.length; i++) {
+    for (let j = i + 1; j < segs.length; j++) {
+      const A = segs[i], B = segs[j];
+      const touch = Math.min(A.x1, B.x1) - Math.max(A.x0, B.x0);
+      if (A.top === B.top || touch <= 0) continue;
+      const rise = Math.abs(A.top - B.top);
+      maxStepPx = Math.max(maxStepPx, rise);
+      jumps.push({ kind: 'step', where: where(A, B), margin: (env.hStand - rise) / env.hStand * 100 });
+    }
+  }
+  const minMargin = jumps.length ? Math.min.apply(null, jumps.map((j) => j.margin)) : 100;
+  return {
+    difficulty: { gapTiles: maxGapPx / T, stepTiles: maxStepPx / T, walkers: L.walkers, pits: pits },
+    jumps: jumps, minMargin: minMargin,
+  };
+}
+
 function overlapBox(a, b) {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
@@ -110,6 +172,7 @@ function startXs(L, node) {
 function checkLevel(L, limits) {
   limits = Object.assign({}, LIMITS, limits || {});
   const t0 = Date.now();
+  const geo = geometry(L, envelope());
   const nodes = [];
   for (let r = 0; r < L.rows; r++) for (let c = 0; c < L.cols; c++) if (standable(L, c, r)) nodes.push(r * L.cols + c);
   if (nodes.length > limits.maxNodes) {
@@ -168,7 +231,11 @@ function checkLevel(L, limits) {
   const summary = 'coins ' + counts.coin[0] + '/' + counts.coin[1] + ', checkpoints ' + counts.checkpoint[0] + '/' +
     counts.checkpoint[1] + ', exits ' + counts.exit[0] + '/' + counts.exit[1] + '; graph ' + nodes.length +
     ' surfaces, ' + reach.size + ' reachable; ' + (Date.now() - t0) + ' ms';
-  return { status: lines.length ? 'FAIL' : 'PASS', lines: lines, summary: summary, checks: targets.length };
+  const thin = geo.jumps.filter((j) => j.margin < 5);
+  thin.forEach((j) => lines.push('FAIL ' + j.kind + ' margin ' + j.margin.toFixed(1) + '% at ' + j.where + ' (below 5%)'));
+  return { status: lines.length ? 'FAIL' : 'PASS', lines: lines,
+    summary: summary + '; min jump margin ' + geo.minMargin.toFixed(1) + '%',
+    checks: targets.length, difficulty: geo.difficulty, minMargin: geo.minMargin };
 }
 
 // Jump envelope from the same physics, on a flat floor (printed for comparison).
@@ -185,10 +252,25 @@ function envelope() {
     p = Physics.stepPlayer(L, p, { moveX: 0, jumpPressed: false, jumpHeld: true }).player;
     minY = Math.min(minY, p.y);
   }
-  return { standRise: 10 * T - C.PLAYER_H - minY, analyticPeak: C.JUMP_V * C.JUMP_V / (2 * C.GRAVITY) };
+  const standRise = 10 * T - C.PLAYER_H - minY;
+  // Running jump: run for 30 steps to full speed, then jump with jump held; reach is the distance the player's left
+  // edge travels to land at the same height.
+  let q = Physics.makePlayer(100, 10 * T - C.PLAYER_H);
+  q.onGround = true;
+  for (let f = 0; f < 30; f++) q = Physics.stepPlayer(L, q, { moveX: 1, jumpPressed: false, jumpHeld: false }).player;
+  const x0 = q.x;
+  let runMinY = q.y;
+  q = Physics.stepPlayer(L, q, { moveX: 1, jumpPressed: true, jumpHeld: true }).player;
+  for (let f = 0; f < 200; f++) {
+    q = Physics.stepPlayer(L, q, { moveX: 1, jumpPressed: false, jumpHeld: true }).player;
+    runMinY = Math.min(runMinY, q.y);
+    if (q.onGround && q.vy >= 0 && q.x > x0 + 4) break;
+  }
+  return { standRise: standRise, hStand: standRise, hRun: 10 * T - C.PLAYER_H - runMinY, dRun: q.x - x0,
+    analyticPeak: C.JUMP_V * C.JUMP_V / (2 * C.GRAVITY) };
 }
 
-module.exports = { buildLevel, checkLevel, envelope, loadLevels, LIMITS };
+module.exports = { buildLevel, checkLevel, envelope, geometry, loadLevels, levelFiles, LIMITS };
 
 function main() {
   const env = envelope();

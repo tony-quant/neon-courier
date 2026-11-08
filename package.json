@@ -4,7 +4,8 @@
   "scripts": {
     "build": "node tools/build.js",
     "icons": "node tools/make-icons.js",
-    "test": "node tools/build.js && playwright test"
+    "test": "node tools/build.js && node tools/reachability.js && bash tools/test-writer-lock.sh && playwright test",
+    "reachability": "node tools/reachability.js"
   },
   "description": "Neon Courier: offline-capable 2D platformer",
   "devDependencies": {

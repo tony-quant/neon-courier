@@ -33,13 +33,13 @@
       row(E, E, E, E, E, E, E, E, E, '......'),
       row(E, E, E, E, E, E, E, E, E, '......'),
       // 6: coins above the first girder
-      row(E, '.....$$...', E, E, E, E, E, E, E, '......'),
+      row(E, E, E, E, E, E, E, E, E, '......'),
       // 7: first girder
-      row(E, '....----..', E, E, E, E, E, E, E, '......'),
+      row(E, E, E, E, E, E, E, E, E, '......'),
       // 8: coins above the second girder
-      row(E, E, '.....$$$$.', E, E, '.......$$$', E, E, E, '......'),
+      row(E, '.....$$...', '.....$$$$.', E, E, '.......$$$', E, E, E, '......'),
       // 9: second and third girders
-      row(E, E, '.....----.', E, E, '.......---', '--........', E, E, '......'),
+      row(E, '....----..', '.....----.', E, E, '.......---', '--........', E, E, '......'),
       // 10: coins on the ground, wall base
       row('......$$$.', E, E, '...##.....', '$$$.......', '$$........', '...$$$....', '.....##...', E, '......'),
       // 11: player start, walker, checkpoint, second walker, exit

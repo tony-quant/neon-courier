@@ -18,7 +18,7 @@ test('every coin and the exit of every sector is reached by a route', () => {
 
 test('a climb sector: with the girder steps removed, no coin and no exit is reachable', () => {
   for (const x of levels) {
-    if (CLIMB_SECTORS.indexOf(x.def.name) < 0) continue;
+    if (x.def.climb !== true && CLIMB_SECTORS.indexOf(x.def.name) < 0) continue;   // a sector that claims a forced climb
     const L = R.buildLevel(x.def);
     const noGirders = { name: x.def.name + ' (no girders)', rows: x.def.rows.map((r) => r.replace(/-/g, '.')) };
     const res = R.checkLevel(R.buildLevel(noGirders));

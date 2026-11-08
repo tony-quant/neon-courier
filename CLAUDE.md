@@ -32,3 +32,14 @@ Hard rules:
 - Prompts go in copyable code blocks, with a feasibility line above each.
 - Facts come from command output. Anything from memory is labeled.
 - A test that cannot fail is not a test.
+
+## Publish rule (applies to every task)
+
+- The only way the live game changes is a push to the platformer branch. The GitHub Action runs the tests and deploys only if they pass.
+- No session may upload files by hand, build a zip for upload, or edit the neon-courier repo on GitHub directly.
+- Never push to main of neon-courier. Never force-push.
+- Before any push to platformer, run the full test suite locally and report the counts. Do not push if any test fails.
+- Every push to platformer publishes to the owner's live site. Push only changes the owner has asked for in the current task.
+- After a deploy, check the served build code at https://tony-quant.github.io/neon-courier/js/version.js and report it. If it does not match the commit's build code, stop and report. Do not push again to force it.
+- If the Action fails, stop and report the error text. Retry at most once.
+- If a session cannot push (credentials or permission), it must say so and stop. It must not work around this with a manual upload.

@@ -7,6 +7,7 @@
   // Tile helpers are shared with the walkers, so they come from the same module.
   const solidAt = Physics.solidAt, oneWayAt = Physics.oneWayAt;
   const INVULN = 60;          // steps of protection after respawning
+  const SPAWN_GRACE = 120;    // steps after a sector starts or a checkpoint respawn in which walkers stand still
   const WALK = 40;            // walker speed px/s
   const ENEMY_W = 12, ENEMY_H = 12;
 
@@ -18,11 +19,9 @@
   const octx = off.getContext('2d');
 
   const muteBtn = document.getElementById('mute');
-  const winEl = document.getElementById('win');
-  const winTitle = document.getElementById('win-title');
-  const winStats = document.getElementById('win-stats');
-  const restartBtn = document.getElementById('restart');
   const menuEl = document.getElementById('menu');
+  const menuStatus = document.getElementById('menu-status');
+  const menuCountdown = document.getElementById('menu-countdown');
   const menuList = document.getElementById('menu-list');
   const menuOpenBtn = document.getElementById('menu-open');
   const menuCloseBtn = document.getElementById('menu-close');
@@ -165,7 +164,7 @@
       if (!world.won && overlap(p, { x: ex.c * T, y: ex.r * T, w: T, h: T })) {
         world.won = true;
         Sound.play('win');
-        showWin();
+        finishSector();
       }
     }
   }
@@ -194,6 +193,7 @@
     p.vx = 0; p.vy = 0;
     p.onGround = false; p.coyote = 0; p.jumpBuf = 0;
     p.invuln = INVULN;
+    world.grace = SPAWN_GRACE;
     world.deaths++;
     Sound.play('hurt');
   }
@@ -236,7 +236,9 @@
     }
     const prevBottom = world.player.y + world.player.h;
     stepPlayer(inp);
-    for (const e of world.enemies) stepEnemy(e, world.level);
+    const frozen = world.grace > 0;                   // walkers stand still on each of the first SPAWN_GRACE frames
+    if (frozen) world.grace--;
+    for (const e of world.enemies) { if (!frozen) stepEnemy(e, world.level); }
     checkEnemies(prevBottom);
     if (world.player.y <= world.level.heightPx) {
       collectCoins();
@@ -257,6 +259,7 @@
       },
       coins: level.coins.map(function (c) { return { x: c.x, y: c.y, taken: false }; }),
       coinsTaken: 0,
+      grace: SPAWN_GRACE,
       enemies: level.enemySpawns.map(function (s, i) {
         return { id: i, x: s.x, y: s.y, w: ENEMY_W, h: ENEMY_H, dir: -1, alive: true, squash: 0, anim: 0 };
       }),
@@ -334,11 +337,12 @@
       menuList.appendChild(li);
     });
   }
-  function showMenu() {
+  function showMenu(status) {
     renderMenu();
     menuOpen = true;
+    menuStatus.textContent = status || 'SECTORS';
+    menuCloseBtn.textContent = flow ? 'CANCEL' : 'BACK';
     menuEl.classList.add('show');
-    winEl.classList.remove('show');
   }
   function hideMenu() {
     menuOpen = false;
@@ -346,8 +350,52 @@
   }
   function startSector(index) {
     if (!isUnlocked(index)) return;
+    cancelFlow();
     hideMenu();
     loadLevel(index);
+  }
+
+  // After a sector is finished: the menu shows (2 s) with that sector done and the next one open; then the next tile
+  // blinks with a 3, 2, 1 countdown (3 s) and the sector starts by itself. The last sector shows the menu and stops.
+  // flow is null, or { phase: 'wait' | 'blink', t0, next }. t0 is set from the frame clock on the first tick.
+  let flow = null;
+  function finishSector() {
+    markDone(levelIndex);
+    if (isLastLevel()) { showMenu('ALL SECTORS CLEAR'); return; }
+    showMenu('LEVEL COMPLETE');
+    flow = { phase: 'wait', t0: null, next: levelIndex + 1 };
+  }
+  function setBlink(index, on) {
+    const li = menuList.children[index];
+    const btn = li && li.firstChild;
+    if (btn) btn.classList.toggle('blink', on);
+  }
+  function cancelFlow() {
+    if (!flow) return;
+    setBlink(flow.next, false);
+    flow = null;
+    menuCountdown.hidden = true;
+    menuCloseBtn.textContent = 'BACK';
+  }
+  function tickFlow(now) {
+    if (flow.t0 === null) flow.t0 = now;
+    const el = now - flow.t0;
+    if (flow.phase === 'wait') {
+      if (el >= 2000) {
+        flow.phase = 'blink';
+        flow.t0 = now;
+        setBlink(flow.next, true);
+        menuCountdown.hidden = false;
+        menuCloseBtn.textContent = 'CANCEL';
+      }
+      return;
+    }
+    menuCountdown.textContent = 'Starting in ' + Math.max(1, 3 - Math.floor(el / 1000)) + '...';
+    if (el >= 3000) {
+      const next = flow.next;
+      cancelFlow();
+      startSector(next);
+    }
   }
 
   function reset() {
@@ -356,17 +404,6 @@
     world.cam.x = clamp(world.player.x + world.player.w / 2 - W / 2, 0, LEVEL.widthPx - W);
     world.cam.y = clamp(world.player.y - H * 0.55, 0, Math.max(0, LEVEL.heightPx - H));
     Input.reset();
-    winEl.classList.remove('show');
-  }
-
-  function showWin() {
-    const last = isLastLevel();
-    markDone(levelIndex);
-    winTitle.textContent = last ? 'ALL SECTORS CLEAR' : 'LEVEL COMPLETE';
-    restartBtn.textContent = last ? 'MENU' : 'NEXT SECTOR';
-    winStats.textContent = 'Coins ' + world.coinsTaken + '/' + world.coins.length +
-      '  ·  Deaths ' + world.deaths;
-    winEl.classList.add('show');
   }
 
   // ---------- rendering and loop ----------
@@ -396,6 +433,7 @@
   function frame(now) {
     const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
+    if (flow) tickFlow(now);
     if (paused()) {
       acc = 0;
     } else {
@@ -440,12 +478,11 @@
     Sound.toggle();
     refreshMute();
   });
-  restartBtn.addEventListener('click', function () {
-    if (!world.won) { reset(); return; }
-    showMenu();                                       // NEXT SECTOR and MENU both go to the menu
-  });
   menuOpenBtn.addEventListener('click', function () { showMenu(); });
-  menuCloseBtn.addEventListener('click', function () { hideMenu(); });
+  menuCloseBtn.addEventListener('click', function () {
+    if (flow) cancelFlow();                           // during the countdown: stop, and keep the menu open
+    else hideMenu();
+  });
   window.addEventListener('keydown', function (e) {
     if (e.code === 'KeyM' && !e.repeat) { Sound.toggle(); refreshMute(); }
     if (e.code === 'KeyR' && !e.repeat) reset();
@@ -470,7 +507,8 @@
   // Small read/teleport hooks used by the automated tests and for debugging.
   window.__game = {
     menu: function () {
-      return { open: menuOpen, unlocked: window.LEVELS.map(function (d, i) { return isUnlocked(i); }), done: done.slice() };
+      return { open: menuOpen, unlocked: window.LEVELS.map(function (d, i) { return isUnlocked(i); }), done: done.slice(),
+        flow: flow ? flow.phase : null };
     },
     startSector: startSector,
     state: function () {

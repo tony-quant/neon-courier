@@ -17,13 +17,10 @@
 <div id="touch-ring" aria-hidden="true"><div id="touch-knob"></div></div>
 <button id="mute" type="button">SOUND ON</button>
 <button id="menu-open" type="button">MENU</button>
-<div id="win" role="dialog" aria-labelledby="win-title">
-  <h1 id="win-title">LEVEL COMPLETE</h1>
-  <p id="win-stats"></p>
-  <button id="restart" type="button">PLAY AGAIN</button>
-</div>
 <div id="menu" role="dialog" aria-labelledby="menu-title">
   <h1 id="menu-title">SECTORS</h1>
+  <p id="menu-status"></p>
+  <p id="menu-countdown" hidden></p>
   <ul id="menu-list"></ul>
   <button id="menu-close" type="button">BACK</button>
 </div>
@@ -34,7 +31,6 @@
 <script src="levels/level2.js"></script>
 <script src="levels/level3.js"></script>
 <script src="levels/level4.js"></script>
-<script src="levels/level5.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/input.js"></script>
 <script src="js/version.js"></script>

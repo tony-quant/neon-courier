@@ -80,3 +80,85 @@ test('from sector 4 on, each sector is at least as large as the one before, and 
     prev = cur;
   }
 });
+
+// ---- live sectors: checkpoint and walker rules ----
+// The rules below apply to every sector that index.html loads (the live sectors), in the order it loads them.
+const fs = require('fs');
+const path = require('path');
+const ROOT = path.join(__dirname, '..');
+const liveFiles = [...fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').matchAll(/src="levels\/(level\d+\.js)"/g)].map((m) => m[1]);
+const live = liveFiles.map((f) => levels.find((lv) => lv.file === f)).filter(Boolean);
+
+// Grid helpers. A walker stands on row r of its tile, on the surface at row r+1.
+function findTile(rows, ch) {
+  const out = [];
+  rows.forEach((row, r) => { for (let c = 0; c < row.length; c++) if (row.charAt(c) === ch) out.push({ r: r, c: c }); });
+  return out;
+}
+// A walker's surface row is solid or girder under it; any column of that row that is not ground is a pit or a ledge end.
+function surfaceEdges(rows, s, W) {
+  const edges = [];
+  for (let j = 0; j < W; j++) {
+    const ch = (rows[s] || '').charAt(j);
+    if (ch !== '#' && ch !== '-') edges.push(j);
+  }
+  return edges;
+}
+
+function walkerViolations(lv) {
+  const rows = lv.def.rows;
+  const W = lv.L.cols;
+  const walkers = findTile(rows, 'e');
+  const spawn = findTile(rows, 'p')[0];
+  const checkpoints = findTile(rows, 'k');
+  const v = [];
+  for (const w of walkers) {
+    const edges = surfaceEdges(rows, w.r + 1, W);
+    const near = edges.filter((j) => Math.abs(j - w.c) < 6);
+    if (near.length) v.push('(a) walker at column ' + w.c + ' is within 6 tiles of a pit or ledge edge at column ' + near[0]);
+    if (spawn && Math.abs(w.c - spawn.c) < 8) v.push('(b) walker at column ' + w.c + ' is within 8 tiles of the spawn (column ' + spawn.c + ')');
+    for (const k of checkpoints) if (Math.abs(w.c - k.c) < 8) v.push('(b) walker at column ' + w.c + ' is within 8 tiles of the checkpoint (column ' + k.c + ')');
+  }
+  for (let i = 0; i < walkers.length; i++) for (let j = i + 1; j < walkers.length; j++) {
+    if (Math.abs(walkers[i].c - walkers[j].c) < 10) v.push('(c) walkers at columns ' + walkers[i].c + ' and ' + walkers[j].c + ' are less than 10 tiles apart');
+  }
+  for (let x0 = 0; x0 <= Math.max(0, W - 20); x0++) {
+    const inWin = walkers.filter((w) => w.c >= x0 && w.c <= x0 + 19);
+    if (inWin.length > 1) v.push('(d) ' + inWin.length + ' walkers in the 20-tile stretch from column ' + x0);
+  }
+  return [...new Set(v)];
+}
+
+function checkpointViolations(lv) {
+  const rows = lv.def.rows;
+  const W = lv.L.cols;
+  const v = [];
+  const cps = findTile(rows, 'k');
+  if (cps.length !== 1) v.push('expected one checkpoint, found ' + cps.length);
+  for (const k of cps) {
+    const pct = (k.c / W) * 100;
+    if (pct < 45 || pct > 55) v.push('checkpoint at column ' + k.c + ' is ' + pct.toFixed(1) + '% of the length (45 to 55 required)');
+    const under = (rows[k.r + 1] || '').charAt(k.c);
+    if (under !== '#' && under !== '-') v.push('checkpoint at column ' + k.c + ' is not on a landing');
+  }
+  return v;
+}
+
+test('live sectors: each checkpoint is on a landing and 45 to 55 percent along the sector', () => {
+  const bad = [];
+  for (const lv of live) {
+    const cps = findTile(lv.def.rows, 'k');
+    const res = R.checkLevel(lv.L);
+    const cpFail = (res.lines || []).filter((l) => l.indexOf('FAIL checkpoint') === 0);
+    if (cpFail.length) bad.push(lv.file + ': ' + cpFail.join('; '));
+    for (const m of checkpointViolations(lv)) bad.push(lv.file + ': ' + m);
+    if (!cps.length) bad.push(lv.file + ': no checkpoint');
+  }
+  assert.deepStrictEqual(bad, [], 'checkpoint rule failures:\n' + bad.join('\n'));
+});
+
+test('live sectors: walker rules (a) to (d) hold', () => {
+  const bad = [];
+  for (const lv of live) for (const m of walkerViolations(lv)) bad.push(lv.file + ': ' + m);
+  assert.deepStrictEqual(bad, [], 'walker rule failures:\n' + bad.join('\n'));
+});

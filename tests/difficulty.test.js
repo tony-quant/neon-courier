@@ -29,8 +29,9 @@ test('every level is in order and passes the reachability check', () => {
   }
 });
 
-// Sectors 1 to 5 are live: index.html loads them in numeric order. Set this to the number of sectors loaded.
-const LIVE_SECTORS = 5;
+// Sectors 1 to 4 are live: index.html loads them in numeric order. Sector 5 is in levels/ but waits for its own push.
+// Set this to the number of sectors loaded.
+const LIVE_SECTORS = 4;
 
 test('the game loads the live sectors, in the same order as the files are numbered', () => {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');

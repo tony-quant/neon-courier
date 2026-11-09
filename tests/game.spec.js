@@ -134,21 +134,16 @@ test('checkpoint: falling in a pit respawns at the checkpoint', async ({ page })
   expect(Math.abs(s.x - cp.checkpointSpawn.x)).toBeLessThan(0.5);
 });
 
-test('level: reaching the exit shows the win screen, and NEXT SECTOR goes to the menu', async ({ page }) => {
+test('level: reaching the exit opens the menu with the sector done, and the next sector starts after the countdown', async ({ page }) => {
   await waitGame(page);
   await page.evaluate(() => window.__game.setPlayer(1474, 178, 0, 0));
   await waitState(page, (s) => s.won);
-  await expect(page.locator('#win')).toHaveClass(/show/);
-  await expect(page.locator('#win-title')).toHaveText('LEVEL COMPLETE');
-  await expect(page.locator('#restart')).toHaveText('NEXT SECTOR');
-  await page.locator('#restart').click();
-  await expect(page.locator('#win')).not.toHaveClass(/show/);
   await expect(page.locator('#menu')).toHaveClass(/show/);
-  await page.locator('#menu-list button').first().click();
-  const s = await waitState(page, (st) => !st.won);
+  await expect(page.locator('#menu-status')).toHaveText('LEVEL COMPLETE');
+  await expect(page.locator('#menu-list button').nth(0)).toContainText('DONE');
+  const s = await waitState(page, (st) => st.levelIndex === 1, 9000);
   await expect(page.locator('#menu')).not.toHaveClass(/show/);
-  expect(s.levelIndex).toBe(0);
-  expect(s.x).toBeLessThan(100);
+  expect(s.won).toBe(false);
 });
 
 test.describe('jump feel (deterministic, fixed steps)', () => {
@@ -374,4 +369,25 @@ test.describe('phone in portrait', () => {
     await waitGame(page);
     await expect(page.locator('#rotate')).toBeVisible();
   });
+});
+
+test('spawn grace: a walker 6 tiles away does not reach the player in the first 120 frames', async ({ page }) => {
+  const manual = (p, on) => p.evaluate((v) => window.__game.manual(v), on);
+  const steps = (p, n) => p.evaluate((k) => window.__game.stepFrames(k), n);
+  await waitGame(page);
+  await manual(page, true);
+  await page.evaluate(() => window.__game.reset());   // a new sector start: the grace begins now, under manual steps
+  const info = await state(page);
+  // sector 1: the first walker stands on the floor at column 36 (rows 11 and 12)
+  const walker = info.enemies[0];
+  await page.evaluate((x) => window.__game.setPlayer(x, 178, 0, 0), walker.x - 6 * 16);
+  const deaths0 = info.deaths;
+  await steps(page, 120);
+  const after = await state(page);
+  expect(after.deaths).toBe(deaths0);                  // no contact, no respawn
+  expect(after.enemies[0].x).toBeCloseTo(walker.x, 3); // the walker did not move toward the player
+  // once the grace is over, the walker moves again
+  await steps(page, 60);
+  const later = await state(page);
+  expect(Math.abs(later.enemies[0].x - walker.x)).toBeGreaterThan(0.5);
 });

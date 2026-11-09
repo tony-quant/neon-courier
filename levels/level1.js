@@ -43,7 +43,7 @@
       // 10: coins on the ground, wall base
       row('......$$$.', E, E, '...##.....', '$$$.......', '$$........', '...$$$....', '.....##...', E, '......'),
       // 11: player start, walker, checkpoint, second walker, exit
-      row('...p......', E, E, '...##.e...', '.....k....', E, '.......e..', '.....##...', '....$.....', '..x...'),
+      row('...p......', E, E, '.e.##.....', '.....k....', E, '...e......', '.....##...', '....$.....', '..x...'),
       // 12-13: ground with three pits
       row(SOLID, SOLID, SOLID_PIT_A, SOLID, SOLID, SOLID_PIT_B, SOLID, SOLID, SOLID_PIT_C, '######'),
       row(SOLID, SOLID, SOLID_PIT_A, SOLID, SOLID, SOLID_PIT_B, SOLID, SOLID, SOLID_PIT_C, '######'),

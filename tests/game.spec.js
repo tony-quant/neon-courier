@@ -371,23 +371,3 @@ test.describe('phone in portrait', () => {
   });
 });
 
-test('spawn grace: a walker 6 tiles away does not reach the player in the first 120 frames', async ({ page }) => {
-  const manual = (p, on) => p.evaluate((v) => window.__game.manual(v), on);
-  const steps = (p, n) => p.evaluate((k) => window.__game.stepFrames(k), n);
-  await waitGame(page);
-  await manual(page, true);
-  await page.evaluate(() => window.__game.reset());   // a new sector start: the grace begins now, under manual steps
-  const info = await state(page);
-  // sector 1: the first walker stands on the floor at column 36 (rows 11 and 12)
-  const walker = info.enemies[0];
-  await page.evaluate((x) => window.__game.setPlayer(x, 178, 0, 0), walker.x - 6 * 16);
-  const deaths0 = info.deaths;
-  await steps(page, 120);
-  const after = await state(page);
-  expect(after.deaths).toBe(deaths0);                  // no contact, no respawn
-  expect(after.enemies[0].x).toBeCloseTo(walker.x, 3); // the walker did not move toward the player
-  // once the grace is over, the walker moves again
-  await steps(page, 60);
-  const later = await state(page);
-  expect(Math.abs(later.enemies[0].x - walker.x)).toBeGreaterThan(0.5);
-});

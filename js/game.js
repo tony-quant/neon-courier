@@ -7,7 +7,6 @@
   // Tile helpers are shared with the walkers, so they come from the same module.
   const solidAt = Physics.solidAt, oneWayAt = Physics.oneWayAt;
   const INVULN = 60;          // steps of protection after respawning
-  const SPAWN_GRACE = 120;    // steps after a sector starts or a checkpoint respawn in which walkers stand still
   const WALK = 40;            // walker speed px/s
   const ENEMY_W = 12, ENEMY_H = 12;
 
@@ -193,7 +192,6 @@
     p.vx = 0; p.vy = 0;
     p.onGround = false; p.coyote = 0; p.jumpBuf = 0;
     p.invuln = INVULN;
-    world.grace = SPAWN_GRACE;
     world.deaths++;
     Sound.play('hurt');
   }
@@ -236,9 +234,7 @@
     }
     const prevBottom = world.player.y + world.player.h;
     stepPlayer(inp);
-    const frozen = world.grace > 0;                   // walkers stand still on each of the first SPAWN_GRACE frames
-    if (frozen) world.grace--;
-    for (const e of world.enemies) { if (!frozen) stepEnemy(e, world.level); }
+    for (const e of world.enemies) stepEnemy(e, world.level);
     checkEnemies(prevBottom);
     if (world.player.y <= world.level.heightPx) {
       collectCoins();
@@ -259,7 +255,6 @@
       },
       coins: level.coins.map(function (c) { return { x: c.x, y: c.y, taken: false }; }),
       coinsTaken: 0,
-      grace: SPAWN_GRACE,
       enemies: level.enemySpawns.map(function (s, i) {
         return { id: i, x: s.x, y: s.y, w: ENEMY_W, h: ENEMY_H, dir: -1, alive: true, squash: 0, anim: 0 };
       }),
